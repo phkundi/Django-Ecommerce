@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% load static %}
+
+
+{% block content %}
+
+<!--Main layout-->
+<main class="mt-5">
+  <div class="container wow fadeIn">
+    <h2 class="my-5 h2 text-center">Order Confirmed</h2>
+    <div class="row">
+        {% include 'order_snippet.html' %}
+    </div>
+  </div>
+</main>
+
+{% endblock %}

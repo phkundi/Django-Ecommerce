@@ -74,7 +74,7 @@ USE_L10N = True
 USE_TZ = True
 
 STATIC_URL = '/static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static_files')]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static_files_dev')]
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -99,3 +99,6 @@ LOGIN_REDIRECT_URL = '/'
 
 # crispy forms
 CRISPY_TEMPLATE_PACK = 'bootstrap4'
+
+STRIPE_SECRET_KEY = 'sk_test_CmRe8goRjG6HdlBPaDMMgDuv009lEhX3RS'
+STRIPE_PUBLIC_KEY = 'pk_test_s1DzrCwFCLIXjrMxqEA2XcyD00F76Afucd'
