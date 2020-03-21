@@ -88,11 +88,11 @@
               </h5>
 
               <h4 class="font-weight-bold blue-text">
-                <strong>$
+                <strong>€
                   {% if item.discount_price %}
-                  {{item.discount_price}}
+                  {{item.discount_price|floatformat:2}}
                   {% else %}
-                  {{ item.price }}
+                  {{ item.price|floatformat:2 }}
                   {% endif %}
                 </strong>
               </h4>

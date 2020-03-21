@@ -11,7 +11,7 @@
       <!--Grid column-->
       <div class="col-md-6 mb-4">
 
-        <img src="https://mdbootstrap.com/img/Photos/Horizontal/E-commerce/Products/14.jpg" class="img-fluid" alt="">
+        <img src="{{object.image.url}}" class="img-fluid" alt="">
 
       </div>
       <!--Grid column-->
@@ -32,14 +32,14 @@
           <p class="lead">
             {% if object.discount_price %}
             <span class="mr-1">
-              <del>${{object.discount_price}}</del>
+              <del>€{{object.discount_price|floatformat:2}}</del>
             </span>
             <span>
-              ${{ object.price }}
+              €{{ object.price|floatformat:2 }}
             </span>
             {% else %}
             <span>
-              ${{ object.price }}
+              €{{ object.price|floatformat:2 }}
             </span>
             {% endif %}
           </p>

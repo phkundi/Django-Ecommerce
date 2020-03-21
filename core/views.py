@@ -1,7 +1,9 @@
 import stripe
 import json
+import random
+import string
 
-from django.http import HttpResponse
+from django.urls import reverse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.core.exceptions import ObjectDoesNotExist
 from django.views.generic import ListView, DetailView, View
@@ -11,35 +13,32 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.conf import settings
 
-from .models import Item, OrderItem, Order, BillingAddress, Payment, Coupon
-from .forms import CheckoutForm, CouponForm
+from .models import Item, OrderItem, Order, Address, Payment, Coupon, Refund
+from .forms import CheckoutForm, CouponForm, RefundForm
 
 stripe_public_key = settings.STRIPE_PUBLIC_KEY
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
-def products(request):
-    context = {
-        'items': Item.objects.all()
-    }
-    return render(request, 'products.html', context)
+# Create Reference Code for Products
+def create_ref_code():
+    return ''.join(random.choices(string.ascii_lowercase + string.digits, k=20))
 
-
-def checkout(request):
-    return render(request, 'checkout.html')
-
-
+# Homepage View
 class HomeView(ListView):
     model = Item
     template_name = 'home.html'
     paginate_by = 10
 
+# Single Product View
 class ItemDetailView(DetailView):
     model = Item
     template_name = 'products.html'
 
+# Order Summary View
 class OrderSummaryView(LoginRequiredMixin, View):
     def get(self, *args, **kwargs):
         try:
+            # Get users orders than have not been ordered
             order = Order.objects.get(user=self.request.user, ordered=False)
             context = {
                 'object': order
@@ -49,12 +48,21 @@ class OrderSummaryView(LoginRequiredMixin, View):
             messages.error(self.request, "You do not have an active order")
             return redirect('/')
 
+def is_valid_form(values):
+    valid = True
+    for field in values:
+        if field == '':
+            valid = False
+    return valid
+
+# Checkout View
 class CheckoutView(View):
     def get(self, *args, **kwargs):
         try:
             form = CheckoutForm()
+            # Get users orders than have not been ordered
             order = Order.objects.get(
-               user=self.request.user,
+                user=self.request.user,
                 ordered=False
             )
 
@@ -62,8 +70,29 @@ class CheckoutView(View):
                 'form': form,
                 'order': order,
                 'couponform': CouponForm(),
-                'DISPLAY_COUPON_FORM': True
+                'DISPLAY_COUPON_FORM': True,
+                'user': self.request.user
             }
+
+            # Get default shipping address for user if it exists
+            shipping_address_qs = Address.objects.filter(
+                user=self.request.user, 
+                address_type='S', 
+                default=True
+            )
+            # Check if default shipping address for user does exist and parse to context
+            if shipping_address_qs.exists():
+                context.update({'default_shipping_address': shipping_address_qs[0]})
+
+            # Get default billing address for user if it exists
+            billing_address_qs = Address.objects.filter(
+                user=self.request.user, 
+                address_type='B', 
+                default=True
+            )
+            # Check if default billing address for user does exist and parse to context
+            if billing_address_qs.exists():
+                context.update({'default_billing_address': billing_address_qs[0]})
 
             return render(self.request, 'checkout.html', context)
 
@@ -74,27 +103,146 @@ class CheckoutView(View):
     def post(self, *args, **kwargs):
         form = CheckoutForm(self.request.POST or None)
         try:
+            # Get users orders than have not been ordered
             order = Order.objects.get(user=self.request.user, ordered=False)
 
             if form.is_valid():
-                street_address = form.cleaned_data.get('street_address')
-                apartment_address = form.cleaned_data.get('apartment_address')
-                country = form.cleaned_data.get('country')
-                zip = form.cleaned_data.get('zip')
-                # TODO: Add these fields
-                # same_shipping_address = form.cleaned_data.get('same_shipping_address')
-                # save_info = form.cleaned_data.get('save_info')
+                 ### Shipping Address ###
+                use_default_shipping = form.cleaned_data.get('use_default_shipping')
+
+                # Check if user wants to use default shipping address
+                if use_default_shipping:
+                    print('using default shipping')
+
+                    # Get default shipping address for user
+                    address_qs = Address.objects.filter(
+                        user=self.request.user, 
+                        address_type='S', 
+                        default=True
+                    )
+
+                    # Check if default shipping address does exist for user and assign to order
+                    if address_qs.exists():
+                        shipping_address = address_qs[0]
+                        order.shipping_address = shipping_address
+                        order.save()
+                    else:
+                        messages.info(self.request, 'No default shipping address available')
+                        return redirect('core:checkout')
+                
+                # If the user does not want to use default shipping address
+                else:
+                    print('Not using default shipping')
+                    # Get form data
+                    shipping_first_name = form.cleaned_data.get('shipping_first_name')
+                    shipping_last_name = form.cleaned_data.get('shipping_last_name')
+                    shipping_address1 = form.cleaned_data.get('shipping_address')
+                    shipping_address2 = form.cleaned_data.get('shipping_address2')
+                    shipping_country = form.cleaned_data.get('shipping_country')
+                    shipping_zip = form.cleaned_data.get('shipping_zip')
+
+                    # Check against empty inputs
+                    if is_valid_form([shipping_address1, shipping_country, shipping_zip,shipping_first_name, shipping_last_name]):
+                        # Create shipping address object
+                        shipping_address = Address(
+                            user = self.request.user,
+                            first_name = shipping_first_name,
+                            last_name = shipping_last_name,
+                            street_address = shipping_address1,
+                            apartment_address = shipping_address2,
+                            country = shipping_country,
+                            zip = shipping_zip,
+                            address_type = 'S'
+                        )
+                        shipping_address.save()
+
+                        # Assign shipping address to order
+                        order.shipping_address = shipping_address
+                        order.save()
+
+                        # If user wants to use address as default shipping address
+                        set_default_shipping = form.cleaned_data.get('set_default_shipping')
+                        if set_default_shipping:
+                            shipping_address.default = True
+                            shipping_address.save()
+                    else:
+                        messages.info(self.request, 'Please fill in the required shipping address fields')
+
+                ### Billing Address ###
+                use_default_billing = form.cleaned_data.get('use_default_billing')
+                same_billing_address = form.cleaned_data.get('same_billing_address')
+
+                # Check if billing address is the same as shipping address (from user input)
+                if same_billing_address:
+                    billing_address = shipping_address
+                    billing_address.pk = None
+                    billing_address.save()
+                    billing_address.address_type = 'B'
+                    billing_address.save()
+                    # Assign billing address to order
+                    order.billing_address = billing_address
+                    order.save()
+
+                # Check if user wants to use default billing address
+                elif use_default_billing:
+                    print('using default billing')
+
+                    # Get default billing address for user
+                    address_qs = Address.objects.filter(
+                        user=self.request.user, 
+                        address_type='B', 
+                        default=True
+                    )
+
+                    # Check if default billing address does exist for user and assign to order
+                    if address_qs.exists():
+                        billing_address = address_qs[0]
+                        order.billing_address = billing_address
+                        order.save()
+                    else:
+                        messages.info(self.request, 'No default billing address available')
+                        return redirect('core:checkout')
+                
+                # If the user does not want to use default billing address
+                else:
+                    print('User is entering new billing address')
+                    # Get form data
+                    billing_first_name = form.cleaned_data.get('billing_first_name')
+                    billing_last_name = form.cleaned_data.get('billing_last_name')
+                    billing_address1 = form.cleaned_data.get('billing_address')
+                    billing_address2 = form.cleaned_data.get('billing_address2')
+                    billing_country = form.cleaned_data.get('billing_country')
+                    billing_zip = form.cleaned_data.get('billing_zip')
+
+                    # Check against empty inputs
+                    if is_valid_form([billing_address1, billing_country, billing_zip, billing_first_name, billing_last_name]):
+                        # Create billing address object
+                        billing_address = Address(
+                            user = self.request.user,
+                            first_name = billing_first_name,
+                            last_name = billing_last_name,
+                            street_address = billing_address1,
+                            apartment_address = billing_address2,
+                            country = billing_country,
+                            zip = billing_zip,
+                            address_type = 'B'
+                        )
+                        billing_address.save()
+
+                        # Assign billing address to order
+                        order.billing_address = billing_address
+                        order.save()
+
+                        # If user wants to use address as default billing address
+                        set_default_billing = form.cleaned_data.get('set_default_billing')
+                        if set_default_billing:
+                            billing_address.default = True
+                            billing_address.save()
+                    else:
+                        messages.info(self.request, 'Please fill in the required billing address fields')
+
+
                 payment_option = form.cleaned_data.get('payment_option')
-                billing_address = BillingAddress(
-                    user = self.request.user,
-                    street_address = street_address,
-                    apartment_address = apartment_address,
-                    country = country,
-                    zip = zip
-                )
-                billing_address.save()
-                order.billing_address = billing_address
-                order.save()
                 
                 if payment_option == 'S':
                     return redirect('core:payment', payment_option='stripe')
@@ -114,46 +262,63 @@ class PaymentView(View):
     def get(self, *args, **kwargs):
         order = Order.objects.get(user=self.request.user, ordered=False)
         amount = int(order.get_total() * 100)
+        user_name = f'{self.request.user.first_name} {self.request.user.last_name}'
 
         if order.billing_address:
+            # Create payment intent
             intent = stripe.PaymentIntent.create(
                 amount=amount,
                 currency='eur',
                 # Verify your integration in this guide by including this parameter
                 metadata={'integration_check': 'accept_a_payment'},
             )
-            
+
             context = {
                 'client_secret': intent.client_secret,
                 'stripe_public_key': stripe_public_key,
                 'intent_id': intent.id,
                 'order': order,
-                'DISPLAY_COUPON_FORM': False
+                'DISPLAY_COUPON_FORM': False,
+                'user_name': user_name
             }
 
             return render(self.request, 'payment.html', context)
+
         else:
-            messages.error(self.request, "You do not provided a billing address")
+            messages.error(self.request, "You did not provide a billing address")
             return redirect('core:checkout')
-
-    #TODO: Move to order confirmed page
-    def post(self, *args, **kwargs):
-        
-        return redirect('/')
-
+    
 class OrderConfirmedView(View):
     def post(self, *args, **kwargs):
+        form = self.request.POST
         order = Order.objects.get(user=self.request.user, ordered=False)
-        intent_id = self.request.POST.get('intent_id')
-
-        context = {
-            'order': order
-        }
+        intent_id = form.get('intent_id')
 
         try:
-            # Use Stripe's library to make requests...
-            pass
-            pass
+            # create the payment
+            payment = Payment()
+            payment.stripe_charge_id = intent_id
+            payment.user = self.request.user
+            payment.amount = order.get_total()
+            payment.save()
+
+            #assign payment to order
+            order_items = order.items.all()
+            order_items.update(ordered=True)
+            for item in order_items:
+                item.save()
+
+            order.ordered = True
+            order.payment = payment
+            order.ref_code = create_ref_code()
+            order.save()
+
+            context = {
+                'order': order
+            }
+
+            return render(self.request, 'order_confirmation.html', context)
+
         except stripe.error.CardError as e:
             # Since it's a decline, stripe.error.CardError will be caught
             messages.error(self.request, f"{e.error.message}")
@@ -185,24 +350,41 @@ class OrderConfirmedView(View):
             messages.error(self.request, "A serious error has occured, we have been notified and will look into it")
             pass
 
-         # create the payment
-        payment = Payment()
-        payment.stripe_charge_id = intent_id
-        payment.user = self.request.user
-        payment.amount = order.get_total()
-        payment.save()
+       
 
-        #assign payment to order
-        order_items = order.items.all()
-        order_items.update(ordered=True)
-        for item in order_items:
-            item.save()
+class RequestRefundView(View):
+    def get(self, *args, **kwargs):
+        form = RefundForm()
 
-        order.ordered = True
-        order.payment = payment
-        order.save()
-    
-        return render(self.request, 'order_confirmation.html', context)
+        context = {
+            'form': form
+        }
+        return render(self.request, 'request_refund.html', context)
+
+    def post(self, *args, **kwargs):
+        form = RefundForm(self.request.POST)
+        if form.is_valid():
+            ref_code = form.cleaned_data.get('ref_code')
+            message = form.cleaned_data.get('message')
+            email = form.cleaned_data.get('email')
+
+            try:
+                order = Order.objects.get(ref_code=ref_code)
+                order.refund_requested = True
+                order.save()
+            
+                refund = Refund()
+                refund.order = order
+                refund.reason = message
+                refund.email = email
+                refund.save()
+
+                messages.info(self.request, 'Your request has been received.')
+                return redirect('core:request-refund')
+
+            except ObjectDoesNotExist:
+                messages.info(self.request, 'This order does not exist')
+                return redirect('core:request-refund')
 
 def add_to_cart(request, slug):
     item = get_object_or_404(Item, slug=slug)

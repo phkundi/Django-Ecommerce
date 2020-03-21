@@ -16,7 +16,7 @@
     <h2 class="my-5 h2 text-center">Payment</h2>
     <div class="row">
       <div class="col-md-12 mb-4">
-        <div class="alert alert-warning text-center" role="alert" id="result-error"></div>
+        <div id="card-errors" role="alert" class="mb-4 text-center"></div>
         <div class="card">
           <form action="{% url 'core:order-confirmed' %}" method="post" class="stripe-form" id="stripe-form">
             {% csrf_token %}
@@ -29,13 +29,7 @@
             <div class="stripe-form-row">
               <button id="stripeBtn">Submit Payment</button>
             </div>
-            <!-- <div class="stripe-form-row">
-              <div class="custom-control custom-checkbox">
-                <input type="checkbox" class="custom-control-input" name="save" id="save_card_info">
-                <label class="custom-control-label" for="save_card_info">Save for future purchases</label>
-              </div>
-            </div> -->
-            <div id="card-errors" role="alert"></div>
+            
             <input type="hidden" name="intent_id" value={{intent_id}}>
         </form>
         </div>
@@ -90,21 +84,24 @@
   
     // Handle form submission.
     var form = document.getElementById('stripe-form');
+    var btn = document.getElementById('stripeBtn');
 
     form.addEventListener('submit', function(ev) {
     ev.preventDefault();
+    btn.disabled = true;
+    btn.textContent = 'Processing...';
     stripe.confirmCardPayment(clientSecret, {
       payment_method: {
         card: card,
         billing_details: {
-          name: 'Jenny Rosen'
+          name: '{{ user_name }}'
         }
       }
     }).then(function(result) {
       if (result.error) {
         // Show error to your customer (e.g., insufficient funds)
-        var resultError = document.getElementById('result-error');
-        resultError.textContent = result.error.message;
+        btn.disabled = false;
+        btn.textContent = 'Submit Payment';
       } else {
         // The payment has been processed!
         if (result.paymentIntent.status === 'succeeded') {
