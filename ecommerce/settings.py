@@ -1,10 +1,10 @@
 import os
 
-ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+ENVIRONMENT = os.environ.get('ENV', 'development')
 
-DEBUG = True
+DEBUG = os.environ.get('DEBUG_VALUE') == 'True'
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SECRET_KEY = '-05sgp9!deq=q1nltm@^^2cc+v29i(tyybv3v2t77qi66czazj'
+SECRET_KEY = os.environ.get('SECRET_KEY')
 ALLOWED_HOSTS = []
 
 if ENVIRONMENT == 'production':
@@ -117,8 +117,8 @@ SOCIALACCOUNT_PROVIDERS = \
         'VERIFIED_EMAIL': False,
         'VERSION': 'v2.4'}}
 
-SOCIAL_AUTH_FACEBOOK_KEY = '1003273176733826' # APP ID
-SOCIAL_AUTH_FACEBOOK_SECRET = 'e8fe59b7c8660077eaed324ad86cd112' # secret key
+SOCIAL_AUTH_FACEBOOK_KEY = os.environ.get('SOCIAL_AUTH_FACEBOOK_KEY') # APP ID
+SOCIAL_AUTH_FACEBOOK_SECRET = os.environ.get('SOCIAL_AUTH_FACEBOOK_SECRET') # secret key
 
 ACCOUNT_FORMS = {
 'signup': 'core.forms.CustomSignupForm',
@@ -137,5 +137,5 @@ LOGIN_REDIRECT_URL = '/'
 # crispy forms
 CRISPY_TEMPLATE_PACK = 'bootstrap4'
 
-STRIPE_SECRET_KEY = 'sk_test_CmRe8goRjG6HdlBPaDMMgDuv009lEhX3RS'
-STRIPE_PUBLIC_KEY = 'pk_test_s1DzrCwFCLIXjrMxqEA2XcyD00F76Afucd'
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY')
+STRIPE_PUBLIC_KEY = os.environ.get('STRIPE_PUBLIC_KEY')
