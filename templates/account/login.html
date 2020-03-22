@@ -7,7 +7,8 @@
 {% block head_title %}{% trans "Sign In" %}{% endblock %}
 
 {% block content %}
-
+<div id="fb-root"></div>
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/de_DE/sdk.js#xfbml=1&version=v6.0&appId=1003273176733826&autoLogAppEvents=1"></script>
 <main>
   <div class="container">
 
@@ -26,15 +27,16 @@
           {% if socialaccount_providers %}
           <p>{% blocktrans with site.name as site_name %}Please sign in with one
             of your existing third party accounts. Or, <a href="{{ signup_url }}">sign up</a>
-            for a {{ site_name }} account and sign in below:{% endblocktrans %}</p>
+            for an account and sign in below:{% endblocktrans %}</p>
 
           <div class="socialaccount_ballot">
 
-            <ul class="socialaccount_providers">
-              {% include "socialaccount/snippets/provider_list.html" with process="login" %}
+            <ul class="socialaccount_providers p-0">
+              <!-- {% include "socialaccount/snippets/provider_list.html" with process="login" %} -->
+              <a href="{% provider_login_url "facebook" method="js_sdk" %}" class="fb-login-button" data-width="" data-size="medium" data-button-type="login_with" data-layout="rounded" data-auto-logout-link="false" data-use-continue-as="false">Facebook Connect</a>
             </ul>
 
-            <div class="login-or">{% trans 'or' %}</div>
+            <!-- <div class="login-or">{% trans 'or' %}</div> -->
 
           </div>
 
